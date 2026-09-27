@@ -1,0 +1,58 @@
+name: CI with NetBird exit node (cross-platform)
+
+on:
+  workflow_dispatch:   # test manually first before wiring into required checks
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # ---- Linux ----
+      - name: Install and connect NetBird (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+          sudo netbird up --setup-key "${{ secrets.NETBIRD_SETUP_KEY }}" \
+            --management-url "${{ vars.NETBIRD_MGMT_URL || 'https://api.netbird.io' }}"
+
+      # ---- Windows ----
+      - name: Install and connect NetBird (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install netbird -y --no-progress
+          netbird up --setup-key "${{ secrets.NETBIRD_SETUP_KEY }}" `
+            --management-url "${{ vars.NETBIRD_MGMT_URL || 'https://api.netbird.io' }}"
+
+      # ---- macOS ----
+      - name: Install and connect NetBird (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install netbirdio/tap/netbird
+          sudo netbird up --setup-key "${{ secrets.NETBIRD_SETUP_KEY }}" \
+            --management-url "${{ vars.NETBIRD_MGMT_URL || 'https://api.netbird.io' }}"
+
+      # ---- Select the exit node (all OSes) ----
+      - name: Route through exit node
+        shell: bash
+        run: |
+          netbird routes select "${{ vars.NETBIRD_EXIT_NODE_ID }}" || true
+          sleep 5
+
+      - name: Confirm egress IP
+        shell: bash
+        run: curl -s ifconfig.me
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Run build/test steps
+        shell: bash
+        run: |
+          echo "Running on ${{ matrix.os }}"
+          # your build/test commands here
